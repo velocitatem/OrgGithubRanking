@@ -1,0 +1,8 @@
+name: "Scoreboard"
+description: "Update the scoreboard"
+on:
+  schedule:
+    - cron: "59 23 * * *"
+runs:
+  using: "node12"
+  main: "index.js"

@@ -13,7 +13,9 @@ function sendToServer(data) {
 }
 
 // get all the users from the people in the Organization IERoboticsClub
-const users = ['velocitatem'];
+const users = [
+        'velocitatem',
+    ];
 
 let metrics = [
     'followers',
