@@ -4,12 +4,15 @@
 // compile them and send them over to the main server
 // ---
 const { Octokit } = require("octokit"); // npm install @octokit/rest
+const fs = require('fs');
 const octokit = new Octokit({
     auth: process.env.GITHUB_TOKEN,
 });
 
 function sendToServer(data) {
-    console.log("SENDING", data);
+    fs.writeFile('data.json', JSON.stringify(data), function (err) {
+        if (err) return console.log(err);
+    });
 }
 
 // get all the users from the people in the Organization IERoboticsClub
@@ -84,19 +87,47 @@ async function main() {
             sort: 'updated'
         })
         // only get the last 4 repos
-        ReposWithContributions.push(reposWithContributions.slice(0, 4));
+        reposWithContributions = reposWithContributions.data.slice(0, 4)
+        ReposWithContributions.push(reposWithContributions);
     }));
 
-    let userActivity = [];
+    let usersActivity = [];
+
+    let creationThreshold = new Date();
+    creationThreshold.setDate(creationThreshold.getDate() - 5);
+
     // last 4 repos with contributions
-    await Promise.all(ReposWithContributions.map(async (repo) => {
-        let activity = await getCommitActivity(repo.data[0].owner.login, repo.data[0].name);
-        console.log(activity);
-        userActivity.push(activity);
+    await Promise.all(ReposWithContributions.map(async (repos) => {
+        let userActivity = []
+        await Promise.all(repos.map(async (repo) => {
+            console.log(repo)
+            let activity = await getCommitActivity(repo.owner.login, repo.name);
+            // returns a list with all the pushes with property created_at: string_date
+            activity = activity.filter((commit) => {
+                let commitDate = new Date(commit.created_at);
+                return commitDate > creationThreshold;
+            });
+            console.log(activity);
+            // return the commits from the each push in the activity
+            activity = activity.map((push) => {
+                return push.payload.commits;
+            });
+            // flatten the array
+            activity = activity.flat();
+            // extend userActivity with the activity from this repo
+            userActivity = userActivity.concat(activity);
+        }));
+        console.log(userActivity)
+        usersActivity.push(userActivity)
     }));
-
+    compiledMetrics = compiledMetrics.map((user, index) => {
+        return {
+            ...user,
+            activity: usersActivity[index]
+        }
+    });
+    // send the data to the server
+    sendToServer(compiledMetrics);
 }
-
-
 
 main();
