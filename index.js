@@ -110,7 +110,13 @@ async function main() {
             console.log(activity);
             // return the commits from the each push in the activity
             activity = activity.map((push) => {
-                return push.payload.commits;
+                return {
+                    ...push.payload.commits['0'],
+                    repo: {
+                        name: push.repo.name,
+                        owner: repo.owner.login
+                    }
+                };
             });
             // flatten the array
             activity = activity.flat();
@@ -120,12 +126,36 @@ async function main() {
         console.log(userActivity)
         usersActivity.push(userActivity)
     }));
+    usersActivity = usersActivity.map((activities) => {
+        return activities.map((activity) => {
+            // get the stats of the commit and return them
+            // get the commit stats from octokit
+
+            octokit.rest.repos.getCommit({
+                owner: activity.repo.owner,
+                repo: activity.repo.name.split('/')[1], // remove the owner from the repo name
+                ref: activity.sha
+            }).then((response) => {
+                console.log(response)
+                return {
+                    // lines changed
+                    total: response.data.stats.total,
+                    ...activity
+                };
+            }).catch((error) => {
+                console.log(error)
+            });
+
+        });
+    });
+
     compiledMetrics = compiledMetrics.map((user, index) => {
         return {
             ...user,
             activity: usersActivity[index]
         }
     });
+
     // send the data to the server
     sendToServer(compiledMetrics);
 }
