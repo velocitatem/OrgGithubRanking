@@ -126,39 +126,64 @@ async function main() {
         console.log(userActivity)
         usersActivity.push(userActivity)
     }));
-    usersActivity = usersActivity.map((activities) => {
-        return activities.map(async (activity) => {
-            // get the stats of the commit and return them
-            // get the commit stats from octokit
+    async function fetchActivities() {
+        const usersActivityPromises = usersActivity.map(async (activities) => {
+            const activityPromises = activities.map(async (activity) => {
+                try {
+                    const response = await octokit.rest.repos.getCommit({
+                        owner: activity.repo.owner,
+                        repo: activity.repo.name.split('/')[1],
+                        ref: activity.sha
+                    });
 
-            return await octokit.rest.repos.getCommit({
-                owner: activity.repo.owner,
-                repo: activity.repo.name.split('/')[1], // remove the owner from the repo name
-                ref: activity.sha
-            }).then((response) => {
-                console.log(response)
-                return {
-                    // lines changed
-                    total: response.data.stats.total,
-                    ...activity
-                };
-            }).catch((error) => {
-                console.log(error)
+                    return {
+                        total: response.data.stats.total,
+                        ...activity
+                    };
+                } catch (error) {
+                    console.log(error);
+                }
             });
 
+            return Promise.all(activityPromises);
         });
-    });
-    console.log(usersActivity);
 
-    compiledMetrics = compiledMetrics.map((user, index) => {
-        return {
-            ...user,
-            activity: usersActivity[index]
-        }
-    });
+        const allUserActivities = await Promise.all(usersActivityPromises);
+        return allUserActivities;
+    }
 
-    // send the data to the server
-    sendToServer(compiledMetrics);
+    fetchActivities()
+        .then((result) => {
+            console.log("All user activities:", result);
+
+            usersActivity = result;
+
+            compiledMetrics = compiledMetrics.map((user, index) => {
+                return {
+                    ...user,
+                    activity: usersActivity[index]
+                }
+            });
+
+            // remove teh author property from the commits in teh activity array
+            compiledMetrics = compiledMetrics.map((user) => {
+                return {
+                    ...user,
+                    activity: user.activity.map((activity) => {
+                        let newActivity = activity;
+                        delete newActivity.author;
+                        return newActivity;
+                    })
+                }
+            });
+
+            // send the data to the server
+            sendToServer(compiledMetrics);
+        })
+        .catch((error) => {
+            console.log("Error fetching activities:", error);
+        });
+
 }
 
 main();
