@@ -127,11 +127,11 @@ async function main() {
         usersActivity.push(userActivity)
     }));
     usersActivity = usersActivity.map((activities) => {
-        return activities.map((activity) => {
+        return activities.map(async (activity) => {
             // get the stats of the commit and return them
             // get the commit stats from octokit
 
-            octokit.rest.repos.getCommit({
+            return await octokit.rest.repos.getCommit({
                 owner: activity.repo.owner,
                 repo: activity.repo.name.split('/')[1], // remove the owner from the repo name
                 ref: activity.sha
@@ -148,6 +148,7 @@ async function main() {
 
         });
     });
+    console.log(usersActivity);
 
     compiledMetrics = compiledMetrics.map((user, index) => {
         return {
