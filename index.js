@@ -8,11 +8,25 @@ const fs = require('fs');
 const octokit = new Octokit({
     auth: process.env.GITHUB_TOKEN,
 });
+const axios = require('axios');
 
 function sendToServer(data) {
-    fs.writeFile('data.json', JSON.stringify(data), function (err) {
-        if (err) return console.log(err);
-    });
+    // save to data.json
+    fs.writeFile('data.json', JSON.stringify(data), (err) => {
+        if (err) {
+            console.error(err)
+            return
+        }
+        //file written successfully
+    })
+
+    axios.post('http://localhost:3000/github/orgrank/upload', data)
+        .then((res) => {
+            console.log(`statusCode: ${res.statusCode}`)
+            console.log(res)
+        })
+        .catch((error) => {
+        })
 }
 
 // get all the users from the people in the Organization IERoboticsClub
@@ -20,170 +34,110 @@ const users = [
         'velocitatem',
     ];
 
-let metrics = [
-    'followers',
-    'following',
-    'public_repos',
-    'public_gists'
-];
+/*
 
+  'followers',
+  'commits',
+  'pull_requests',
+  'stars',
+  'following',
+  'public_repos',
+  'public_gists'
+  */
+let metrics = {
+    followers: {
 
-async function getCommitActivity(owner, repo) {
-    try {
-        const response = await octokit.rest.activity.listRepoEvents({
-            owner: owner,
-            repo: repo,
-        });
+        get: (username) => {
+            return octokit.request('GET /users/{username}/followers', {
+                username: username,
+            }).then((response) => {
+                return {
+                    data: { total_count: response.data.length }
+                }
+            });
+        }
+    },
+    commits: {
 
-        const commitEvents = response.data.filter(
-            (event) => event.type === "PushEvent"
-        );
+        get: (username) => {
+            return octokit.request('GET /search/commits', {
+                q: `author:${username}+committer:${username}`,
+            });
+        }
+    },
+    pull_requests: {
 
-        return commitEvents;
-    } catch (error) {
-        console.error("Error retrieving commit activity:", error);
-        throw error;
+        get: (username) => {
+            return octokit.request('GET /search/issues', {
+                q: `type:pr+author:${username}`,
+            });
+        }
+    },
+    stars: { // number of stars on all repos
+
+        get: (username) => {
+            return octokit.request('GET /search/repositories', {
+                q: `user:${username}`,
+            }).then((response) => {
+                let stars = 0;
+                response.data.items.forEach((repo) => {
+                    stars += repo.stargazers_count;
+                });
+                return {
+                    data: { total_count: stars }
+                }
+            });
+        }
+    },
+    following: {
+
+        get: (username) => {
+            return octokit.request('GET /users/{username}/following', {
+                username: username,
+            }).then((response) => {
+                return {
+                    data: { total_count: response.data.length }
+                }
+            });
+        }
+    },
+    public_repos: {
+
+        get: (username) => {
+            return octokit.request('GET /users/{username}/repos', {
+                username: username,
+            }).then((response) => {
+                return {
+                    data: { total_count: response.data.length }
+                }
+            });
+        }
+    },
+    public_gists: {
+
+        get: (username) => {
+            return octokit.request('GET /users/{username}/gists', {
+                username: username,
+            }).then((response) => {
+                return {
+                    data: { total_count: response.data.length }
+                }
+            })
+        }
     }
-}
+};
 
 async function main() {
-    let stats = [];
-    await Promise.all(users.map(async (user) => {
-        let stat = await octokit.rest.users.getByUsername({
-            username: user
-        });
-        stats.push(stat);
-    }));
-    // compile the stats
-    let compiledMetrics = stats.map((stat) => {
-        return {
-            user: stat.data.login,
-            stats: metrics.map((metric) => {
-                return {
-                    metric: metric,
-                    value: stat.data[metric]
-                };
-            })
-        };
+    let data = users.map(async (user) => {
+        let data = {};
+        for (let metric in metrics) {
+            let response = await metrics[metric].get(user);
+            data[metric] = response.data.total_count;
+        }
+        return data;
     });
-    console.log(compiledMetrics);
-
-    // contribution statistics
-    // for each user get a list of all the repos they have contributed to in the last 24h
-
-    let ReposWithContributions = [];
-    /*
-
-      let reposWithContributions = await octokit.rest.repos.listForUser({
-      username: user,
-      sort: 'updated'
-      });
-      the above for each user
-      */
-    await Promise.all(users.map(async (user) => {
-        console.log(user)
-        let reposWithContributions = await octokit.rest.repos.listForUser({
-            username: user,
-            sort: 'updated'
-        })
-        // only get the last 4 repos
-        reposWithContributions = reposWithContributions.data.slice(0, 4)
-        ReposWithContributions.push(reposWithContributions);
-    }));
-
-    let usersActivity = [];
-
-    let creationThreshold = new Date();
-    creationThreshold.setDate(creationThreshold.getDate() - 5);
-
-    // last 4 repos with contributions
-    await Promise.all(ReposWithContributions.map(async (repos) => {
-        let userActivity = []
-        await Promise.all(repos.map(async (repo) => {
-            console.log(repo)
-            let activity = await getCommitActivity(repo.owner.login, repo.name);
-            // returns a list with all the pushes with property created_at: string_date
-            activity = activity.filter((commit) => {
-                let commitDate = new Date(commit.created_at);
-                return commitDate > creationThreshold;
-            });
-            console.log(activity);
-            // return the commits from the each push in the activity
-            activity = activity.map((push) => {
-                return {
-                    ...push.payload.commits['0'],
-                    repo: {
-                        name: push.repo.name,
-                        owner: repo.owner.login
-                    }
-                };
-            });
-            // flatten the array
-            activity = activity.flat();
-            // extend userActivity with the activity from this repo
-            userActivity = userActivity.concat(activity);
-        }));
-        console.log(userActivity)
-        usersActivity.push(userActivity)
-    }));
-    async function fetchActivities() {
-        const usersActivityPromises = usersActivity.map(async (activities) => {
-            const activityPromises = activities.map(async (activity) => {
-                try {
-                    const response = await octokit.rest.repos.getCommit({
-                        owner: activity.repo.owner,
-                        repo: activity.repo.name.split('/')[1],
-                        ref: activity.sha
-                    });
-
-                    return {
-                        total: response.data.stats.total,
-                        ...activity
-                    };
-                } catch (error) {
-                    console.log(error);
-                }
-            });
-
-            return Promise.all(activityPromises);
-        });
-
-        const allUserActivities = await Promise.all(usersActivityPromises);
-        return allUserActivities;
-    }
-
-    fetchActivities()
-        .then((result) => {
-            console.log("All user activities:", result);
-
-            usersActivity = result;
-
-            compiledMetrics = compiledMetrics.map((user, index) => {
-                return {
-                    ...user,
-                    activity: usersActivity[index]
-                }
-            });
-
-            // remove teh author property from the commits in teh activity array
-            compiledMetrics = compiledMetrics.map((user) => {
-                return {
-                    ...user,
-                    activity: user.activity.map((activity) => {
-                        let newActivity = activity;
-                        delete newActivity.author;
-                        return newActivity;
-                    })
-                }
-            });
-
-            // send the data to the server
-            sendToServer(compiledMetrics);
-        })
-        .catch((error) => {
-            console.log("Error fetching activities:", error);
-        });
-
+    data = await Promise.all(data);
+    sendToServer(data);
 }
 
 main();
