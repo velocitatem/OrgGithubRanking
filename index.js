@@ -31,9 +31,8 @@ function sendToServer(data) {
 
 // get all the users from the people in the Organization IERoboticsClub
 const users = [
-        'velocitatem',
-    ];
-
+    'velocitatem',
+];
 /*
 
   'followers',
@@ -129,7 +128,10 @@ let metrics = {
 
 async function main() {
     let data = users.map(async (user) => {
-        let data = {};
+        let data = {
+            username: user,
+            date: new Date()
+        };
         for (let metric in metrics) {
             let response = await metrics[metric].get(user);
             data[metric] = response.data.total_count;
