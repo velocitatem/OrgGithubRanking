@@ -4,5 +4,5 @@ on:
   schedule:
     - cron: "59 23 * * *"
 runs:
-  using: "node18"
+  using: "node20"
   main: "index.js"
