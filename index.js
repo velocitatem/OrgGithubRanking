@@ -5,8 +5,12 @@
 // ---
 const { Octokit } = require("octokit"); // npm install @octokit/rest
 const fs = require('fs');
+const fetch = require('node-fetch');
 const octokit = new Octokit({
     auth: process.env.GITHUB_TOKEN,
+    request: {
+        fetch: fetch
+    }
 });
 const axios = require('axios');
 
