@@ -5,7 +5,7 @@
 // ---
 const { Octokit } = require("octokit"); // npm install @octokit/rest
 const fs = require('fs');
-const fetch = require('node-fetch');
+import fetch from 'node-fetch';
 const octokit = new Octokit({
     auth: process.env.GITHUB_TOKEN,
     request: {
