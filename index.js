@@ -5,14 +5,11 @@
 // ---
 const { Octokit } = require("octokit"); // npm install @octokit/rest
 const fs = require('fs');
-import fetch from 'node-fetch';
+const axios = require('axios');
+// create a fetch simulation with axios
 const octokit = new Octokit({
     auth: process.env.GITHUB_TOKEN,
-    request: {
-        fetch: fetch
-    }
 });
-const axios = require('axios');
 
 function sendToServer(data) {
     // save to data.json
@@ -34,7 +31,7 @@ function sendToServer(data) {
 }
 
 // get the owner of the repo this is running in
-let currentOwner = process.env.GITHUB_REPOSITORY.split('/')[0];
+let currentOwner =  process.env.GITHUB_REPOSITORY.split('/')[0];
 
 const users =  [currentOwner];
       /*
@@ -138,6 +135,7 @@ async function main() {
         };
         for (let metric in metrics) {
             let response = await metrics[metric].get(user);
+            console.log(response);
             data[metric] = response.data.total_count;
         }
         return data;
