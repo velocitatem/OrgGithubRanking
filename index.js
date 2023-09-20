@@ -20,7 +20,7 @@ function sendToServer(data) {
         //file written successfully
     })
 
-    axios.post('http://localhost:3000/github/orgrank/upload', data)
+    axios.post('https://coral-app-fwssm.ondigitalocean.app/github/orgrank/upload', data)
         .then((res) => {
             console.log(`statusCode: ${res.statusCode}`)
             console.log(res)
@@ -29,11 +29,11 @@ function sendToServer(data) {
         })
 }
 
-// get all the users from the people in the Organization IERoboticsClub
-const users = [
-    'velocitatem',
-];
-/*
+// get the owner of the repo this is running in
+let currentOwner = process.env.GITHUB_REPOSITORY.split('/')[0];
+
+const users =  [currentOwner];
+      /*
 
   'followers',
   'commits',
