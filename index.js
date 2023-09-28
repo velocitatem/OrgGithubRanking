@@ -6,20 +6,12 @@
 const { Octokit } = require("octokit"); // npm install @octokit/rest
 const fs = require('fs');
 const axios = require('axios');
-// create a fetch simulation with axios
+// create a fetch simulation wGith axios
 const octokit = new Octokit({
     auth: process.env.GITHUB_TOKEN,
 });
 
 function sendToServer(data) {
-    // save to data.json
-    fs.writeFile('data.json', JSON.stringify(data), (err) => {
-        if (err) {
-            console.error(err)
-            return
-        }
-        //file written successfully
-    })
 
     axios.post('https://coral-app-fwssm.ondigitalocean.app/github/orgrank/upload', data)
         .then((res) => {
@@ -31,7 +23,8 @@ function sendToServer(data) {
 }
 
 // get the owner of the repo this is running in
-let currentOwner =  process.env.GITHUB_REPOSITORY.split('/')[0];
+let currentOwner = 'velocitatem'
+    //process.env.GITHUB_REPOSITORY.split('/')[0];
 
 const users =  [currentOwner];
       /*
@@ -45,18 +38,6 @@ const users =  [currentOwner];
   'public_gists'
   */
 let metrics = {
-    followers: {
-
-        get: (username) => {
-            return octokit.request('GET /users/{username}/followers', {
-                username: username,
-            }).then((response) => {
-                return {
-                    data: { total_count: response.data.length }
-                }
-            });
-        }
-    },
     commits: {
 
         get: (username) => {
@@ -71,6 +52,27 @@ let metrics = {
             return octokit.request('GET /search/issues', {
                 q: `type:pr+author:${username}`,
             });
+        }
+    },
+    about: {
+
+        get: (username) => {
+            // get followers, following, public repos, public gists, id
+            return octokit.request('GET /users/{username}', {
+                username: username,
+            }).then((response) => {
+                return {
+                    data: {
+                        total_count: {
+                            followers: response.data.followers,
+                            following: response.data.following,
+                            public_repos: response.data.public_repos,
+                            public_gists: response.data.public_gists,
+                            id: response.data.id
+                        }
+                    }
+                }
+            })
         }
     },
     stars: { // number of stars on all repos
@@ -89,40 +91,40 @@ let metrics = {
             });
         }
     },
-    following: {
+    // metric of the total number of lines of code changed in all the repos
+    // in the past 24 hours
+    cc: {
 
         get: (username) => {
-            return octokit.request('GET /users/{username}/following', {
-                username: username,
+
+            return octokit.request('GET /search/commits', {
+                q: `author:${username}+committer:${username}+committer-date:>${new Date(new Date().getTime() - 24 * 60 * 60 * 1000).toISOString()}`,
             }).then((response) => {
-                return {
-                    data: { total_count: response.data.length }
+                let cc = 0;
+
+                // stats not included, so we have to get the commit
+                // also avoid rate limit
+                let commits = response.data.items;
+                // avoid rate limit
+                if (commits.length > 10) {
+                    commits = commits.slice(0, 10);
                 }
+                let promises = commits.map((commit) => {
+                    return octokit.request('GET /repos/{owner}/{repo}/commits/{ref}', {
+                        owner: commit.repository.owner.login,
+                        repo: commit.repository.name,
+                        ref: commit.sha
+                    }).then((response) => {
+                        let stats = response.data.stats;
+                        cc += stats.total;
+                    });
+                });
+                return Promise.all(promises).then(() => {
+                    return {
+                        data: { total_count: cc }
+                    }
+                });
             });
-        }
-    },
-    public_repos: {
-
-        get: (username) => {
-            return octokit.request('GET /users/{username}/repos', {
-                username: username,
-            }).then((response) => {
-                return {
-                    data: { total_count: response.data.length }
-                }
-            });
-        }
-    },
-    public_gists: {
-
-        get: (username) => {
-            return octokit.request('GET /users/{username}/gists', {
-                username: username,
-            }).then((response) => {
-                return {
-                    data: { total_count: response.data.length }
-                }
-            })
         }
     }
 };
@@ -133,15 +135,17 @@ async function main() {
             username: user,
             date: new Date()
         };
+        // test only public_repos
         for (let metric in metrics) {
+            console.log(`Getting ${metric} for ${user}`);
             let response = await metrics[metric].get(user);
-            console.log(response);
             data[metric] = response.data.total_count;
         }
         return data;
     });
     data = await Promise.all(data);
-    sendToServer(data);
+    // sendToServer(data);
+    console.log(data);
 }
 
 main();
