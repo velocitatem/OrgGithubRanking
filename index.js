@@ -16,15 +16,14 @@ function sendToServer(data) {
     axios.post('https://coral-app-fwssm.ondigitalocean.app/github/orgrank/upload', data)
         .then((res) => {
             console.log(`statusCode: ${res.statusCode}`)
-            console.log(res)
+            console.log(res.data)
         })
         .catch((error) => {
         })
 }
 
 // get the owner of the repo this is running in
-let currentOwner = 'velocitatem'
-    //process.env.GITHUB_REPOSITORY.split('/')[0];
+let currentOwner = process.env.GITHUB_REPOSITORY.split('/')[0];
 
 const users =  [currentOwner];
       /*
@@ -43,6 +42,10 @@ let metrics = {
         get: (username) => {
             return octokit.request('GET /search/commits', {
                 q: `author:${username}+committer:${username}`,
+            }).then((response) => {
+                return {
+                    data: { total_count: response.data.total_count }
+                }
             });
         }
     },
@@ -51,10 +54,14 @@ let metrics = {
         get: (username) => {
             return octokit.request('GET /search/issues', {
                 q: `type:pr+author:${username}`,
-            });
+            }).then((response) => {
+                return {
+                    data: { total_count: response.data.total_count }
+                }
+            })
         }
     },
-    about: {
+    user: {
 
         get: (username) => {
             // get followers, following, public repos, public gists, id
@@ -101,6 +108,7 @@ let metrics = {
                 q: `author:${username}+committer:${username}+committer-date:>${new Date(new Date().getTime() - 24 * 60 * 60 * 1000).toISOString()}`,
             }).then((response) => {
                 let cc = 0;
+                let size = 0;
 
                 // stats not included, so we have to get the commit
                 // also avoid rate limit
@@ -117,11 +125,12 @@ let metrics = {
                     }).then((response) => {
                         let stats = response.data.stats;
                         cc += stats.total;
+                        size += 1;
                     });
                 });
                 return Promise.all(promises).then(() => {
                     return {
-                        data: { total_count: cc }
+                        data: { total_count: cc  }
                     }
                 });
             });
@@ -144,8 +153,8 @@ async function main() {
         return data;
     });
     data = await Promise.all(data);
-    // sendToServer(data);
-    console.log(data);
+    sendToServer(data);
+
 }
 
 main();
